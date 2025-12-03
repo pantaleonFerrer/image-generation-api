@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  studio-ia-api:
+    build: .
+    container_name: studio-ia-api
+    env_file:
+      - .env
+    environment:
+      # La API Key se coge de tu entorno/local o del archivo .env
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      PORT: ${PORT:-8080}
+    ports:
+      - "8080:8080"
