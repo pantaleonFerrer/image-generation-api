@@ -9,12 +9,13 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/joho/godotenv"
 	"google.golang.org/genai"
 )
 
 var (
 	aiClient  *genai.Client
-	modelName = "imagen-4.0-generate-001"
+	modelName = "gemini-3-pro-image-preview"
 )
 
 type TextToImageRequest struct {
@@ -36,6 +37,15 @@ type MagicEraserRequest struct {
 }
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Printf("Warning: No se pudo cargar el archivo .env: %v", err)
+	}
+
+	apiKey := os.Getenv("GOOGLE_API_KEY")
+	if apiKey == "" {
+		log.Fatal("Error: GOOGLE_API_KEY no está configurada. Por favor, configura la variable de entorno o crea un archivo .env")
+	}
+
 	ctx := context.Background()
 
 	client, err := genai.NewClient(ctx, nil)
@@ -63,149 +73,194 @@ func main() {
 
 func handleTextToImage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		writeError(w, "POST only", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req TextToImageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid body", http.StatusBadRequest)
+		writeError(w, "invalid body", http.StatusBadRequest)
 		return
 	}
 	if req.Prompt == "" {
-		http.Error(w, "missing prompt", http.StatusBadRequest)
+		writeError(w, "missing prompt", http.StatusBadRequest)
 		return
 	}
 
 	ctx := r.Context()
-	imgBytes, err := generateSingleImage(ctx, req.Prompt)
+	imgBytes, mimeType, err := generateSingleImage(ctx, req.Prompt)
 	if err != nil {
-		http.Error(w, "generation error", http.StatusInternalServerError)
+		log.Printf("Error generating image: %v", err)
+		writeError(w, fmt.Sprintf("generation error: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	writeImagePNG(w, imgBytes)
+	writeImage(w, imgBytes, mimeType)
 }
 
 func handleResize(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		writeError(w, "POST only", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req ResizeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid body", http.StatusBadRequest)
+		writeError(w, "invalid body", http.StatusBadRequest)
 		return
 	}
 	if req.ImageBase64 == "" {
-		http.Error(w, "missing image", http.StatusBadRequest)
+		writeError(w, "missing image", http.StatusBadRequest)
 		return
 	}
 	if req.Scale != 2 && req.Scale != 4 {
-		http.Error(w, "scale must be 2 or 4", http.StatusBadRequest)
+		writeError(w, "scale must be 2 or 4", http.StatusBadRequest)
 		return
 	}
 
 	if _, err := base64.StdEncoding.DecodeString(req.ImageBase64); err != nil {
-		http.Error(w, "invalid base64", http.StatusBadRequest)
+		writeError(w, "invalid base64", http.StatusBadRequest)
 		return
 	}
 
 	prompt := fmt.Sprintf("Resize this image by x%d preserving details.", req.Scale)
 
 	ctx := r.Context()
-	imgBytes, err := generateSingleImage(ctx, prompt)
+	imgBytes, mimeType, err := generateSingleImage(ctx, prompt)
 	if err != nil {
-		http.Error(w, "resize error", http.StatusInternalServerError)
+		log.Printf("Error resizing image: %v", err)
+		writeError(w, fmt.Sprintf("resize error: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	writeImagePNG(w, imgBytes)
+	writeImage(w, imgBytes, mimeType)
 }
 
 func handleSketchToImage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		writeError(w, "POST only", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req SketchToImageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid body", http.StatusBadRequest)
+		writeError(w, "invalid body", http.StatusBadRequest)
 		return
 	}
 	if req.ImageBase64 == "" || req.Description == "" {
-		http.Error(w, "missing fields", http.StatusBadRequest)
+		writeError(w, "missing fields", http.StatusBadRequest)
 		return
 	}
 
 	if _, err := base64.StdEncoding.DecodeString(req.ImageBase64); err != nil {
-		http.Error(w, "invalid base64", http.StatusBadRequest)
+		writeError(w, "invalid base64", http.StatusBadRequest)
 		return
 	}
 
 	prompt := fmt.Sprintf("Sketch to Image: interpret this sketch as '%s'.", req.Description)
 
 	ctx := r.Context()
-	imgBytes, err := generateSingleImage(ctx, prompt)
+	imgBytes, mimeType, err := generateSingleImage(ctx, prompt)
 	if err != nil {
-		http.Error(w, "sketch error", http.StatusInternalServerError)
+		log.Printf("Error converting sketch to image: %v", err)
+		writeError(w, fmt.Sprintf("sketch error: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	writeImagePNG(w, imgBytes)
+	writeImage(w, imgBytes, mimeType)
 }
 
 func handleMagicEraser(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		writeError(w, "POST only", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req MagicEraserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid body", http.StatusBadRequest)
+		writeError(w, "invalid body", http.StatusBadRequest)
 		return
 	}
 	if req.ImageBase64 == "" {
-		http.Error(w, "missing image", http.StatusBadRequest)
+		writeError(w, "missing image", http.StatusBadRequest)
 		return
 	}
 
 	if _, err := base64.StdEncoding.DecodeString(req.ImageBase64); err != nil {
-		http.Error(w, "invalid base64", http.StatusBadRequest)
+		writeError(w, "invalid base64", http.StatusBadRequest)
 		return
 	}
 
 	prompt := "Magic eraser: remove the pink masked area and reconstruct background."
 
 	ctx := r.Context()
-	imgBytes, err := generateSingleImage(ctx, prompt)
+	imgBytes, mimeType, err := generateSingleImage(ctx, prompt)
 	if err != nil {
-		http.Error(w, "eraser error", http.StatusInternalServerError)
+		log.Printf("Error with magic eraser: %v", err)
+		writeError(w, fmt.Sprintf("eraser error: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	writeImagePNG(w, imgBytes)
+	writeImage(w, imgBytes, mimeType)
 }
 
-func generateSingleImage(ctx context.Context, prompt string) ([]byte, error) {
-	cfg := &genai.GenerateImagesConfig{
-		NumberOfImages: 1,
+func generateSingleImage(ctx context.Context, prompt string) ([]byte, string, error) {
+	contents := []*genai.Content{
+		{
+			Role: "user",
+			Parts: []*genai.Part{
+				genai.NewPartFromText(prompt),
+			},
+		},
 	}
-	resp, err := aiClient.Models.GenerateImages(ctx, modelName, prompt, cfg)
-	if err != nil {
-		return nil, err
+
+	config := &genai.GenerateContentConfig{
+		ResponseModalities: []string{
+			"IMAGE",
+			"TEXT",
+		},
+		ImageConfig: &genai.ImageConfig{
+			ImageSize: "1K",
+		},
 	}
-	if len(resp.GeneratedImages) == 0 || resp.GeneratedImages[0].Image == nil {
-		return nil, fmt.Errorf("no image returned")
+
+	for result, err := range aiClient.Models.GenerateContentStream(ctx, modelName, contents, config) {
+		if err != nil {
+			return nil, "", err
+		}
+
+		if len(result.Candidates) == 0 || result.Candidates[0].Content == nil || len(result.Candidates[0].Content.Parts) == 0 {
+			continue
+		}
+
+		parts := result.Candidates[0].Content.Parts
+		for _, part := range parts {
+			if part.InlineData != nil {
+				mimeType := part.InlineData.MIMEType
+				if mimeType == "" {
+					mimeType = "image/png"
+				}
+				return part.InlineData.Data, mimeType, nil
+			}
+		}
 	}
-	return resp.GeneratedImages[0].Image.ImageBytes, nil
+
+	return nil, "", fmt.Errorf("no image returned")
 }
 
-func writeImagePNG(w http.ResponseWriter, img []byte) {
-	w.Header().Set("Content-Type", "image/png")
+func writeImage(w http.ResponseWriter, img []byte, mimeType string) {
+	if mimeType == "" {
+		mimeType = "image/png"
+	}
+	w.Header().Set("Content-Type", mimeType)
 	w.WriteHeader(http.StatusOK)
 	w.Write(img)
+}
+
+func writeError(w http.ResponseWriter, message string, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(map[string]string{
+		"error": message,
+	})
 }
