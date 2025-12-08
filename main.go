@@ -65,8 +65,25 @@ func main() {
 		port = "8080"
 	}
 
-	log.Printf("API listening on :%s", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
+	// Configurar servidor con límite de body aumentado (100MB por defecto)
+	maxBodySize := int64(100 * 1024 * 1024) // 100MB
+	if maxBodySizeEnv := os.Getenv("MAX_BODY_SIZE_MB"); maxBodySizeEnv != "" {
+		var mb int64
+		if _, err := fmt.Sscanf(maxBodySizeEnv, "%d", &mb); err == nil {
+			maxBodySize = mb * 1024 * 1024
+		}
+	}
+
+	server := &http.Server{
+		Addr:           ":" + port,
+		Handler:        http.MaxBytesHandler(http.DefaultServeMux, maxBodySize),
+		ReadTimeout:    30 * 60 * 1000000000, // 30 minutos
+		WriteTimeout:   30 * 60 * 1000000000, // 30 minutos
+		MaxHeaderBytes: 1 << 20,              // 1MB para headers
+	}
+
+	log.Printf("API listening on :%s (Max body size: %d MB)", port, maxBodySize/(1024*1024))
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
 }

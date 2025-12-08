@@ -10,5 +10,6 @@ services:
       # La API Key se coge de tu entorno/local o del archivo .env
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       PORT: ${PORT:-8080}
+      MAX_BODY_SIZE_MB: ${MAX_BODY_SIZE_MB:-100}
     ports:
       - "8080:8080"
