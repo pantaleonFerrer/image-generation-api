@@ -14,8 +14,9 @@ import (
 )
 
 var (
-	aiClient  *genai.Client
-	modelName = "gemini-3-pro-image-preview"
+	aiClient    *genai.Client
+	modelName   = "gemini-3-pro-image-preview"
+	maxBodySize int64
 )
 
 type TextToImageRequest struct {
@@ -55,18 +56,7 @@ func main() {
 
 	aiClient = client
 
-	http.HandleFunc("/text-to-image", handleTextToImage)
-	http.HandleFunc("/resize", handleResize)
-	http.HandleFunc("/sketch-to-image", handleSketchToImage)
-	http.HandleFunc("/magic-eraser", handleMagicEraser)
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
-	// Configurar servidor con límite de body aumentado (100MB por defecto)
-	maxBodySize := int64(100 * 1024 * 1024) // 100MB
+	maxBodySize = int64(100 * 1024 * 1024)
 	if maxBodySizeEnv := os.Getenv("MAX_BODY_SIZE_MB"); maxBodySizeEnv != "" {
 		var mb int64
 		if _, err := fmt.Sscanf(maxBodySizeEnv, "%d", &mb); err == nil {
@@ -74,12 +64,24 @@ func main() {
 		}
 	}
 
+	// Crear mux con middleware
+	mux := http.NewServeMux()
+	mux.HandleFunc("/text-to-image", limitBodySize(handleTextToImage))
+	mux.HandleFunc("/resize", limitBodySize(handleResize))
+	mux.HandleFunc("/sketch-to-image", limitBodySize(handleSketchToImage))
+	mux.HandleFunc("/magic-eraser", limitBodySize(handleMagicEraser))
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
 	server := &http.Server{
 		Addr:           ":" + port,
-		Handler:        http.MaxBytesHandler(http.DefaultServeMux, maxBodySize),
+		Handler:        mux,
 		ReadTimeout:    30 * 60 * 1000000000, // 30 minutos
 		WriteTimeout:   30 * 60 * 1000000000, // 30 minutos
-		MaxHeaderBytes: 1 << 20,              // 1MB para headers
+		MaxHeaderBytes: 10 << 20,             // 10MB para headers
 	}
 
 	log.Printf("API listening on :%s (Max body size: %d MB)", port, maxBodySize/(1024*1024))
@@ -96,6 +98,10 @@ func handleTextToImage(w http.ResponseWriter, r *http.Request) {
 
 	var req TextToImageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err.Error() == "http: request body too large" {
+			writeError(w, fmt.Sprintf("Request body too large. Maximum size: %d MB", maxBodySize/(1024*1024)), http.StatusRequestEntityTooLarge)
+			return
+		}
 		writeError(w, "invalid body", http.StatusBadRequest)
 		return
 	}
@@ -123,6 +129,10 @@ func handleResize(w http.ResponseWriter, r *http.Request) {
 
 	var req ResizeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err.Error() == "http: request body too large" {
+			writeError(w, fmt.Sprintf("Request body too large. Maximum size: %d MB", maxBodySize/(1024*1024)), http.StatusRequestEntityTooLarge)
+			return
+		}
 		writeError(w, "invalid body", http.StatusBadRequest)
 		return
 	}
@@ -161,6 +171,10 @@ func handleSketchToImage(w http.ResponseWriter, r *http.Request) {
 
 	var req SketchToImageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err.Error() == "http: request body too large" {
+			writeError(w, fmt.Sprintf("Request body too large. Maximum size: %d MB", maxBodySize/(1024*1024)), http.StatusRequestEntityTooLarge)
+			return
+		}
 		writeError(w, "invalid body", http.StatusBadRequest)
 		return
 	}
@@ -195,6 +209,10 @@ func handleMagicEraser(w http.ResponseWriter, r *http.Request) {
 
 	var req MagicEraserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err.Error() == "http: request body too large" {
+			writeError(w, fmt.Sprintf("Request body too large. Maximum size: %d MB", maxBodySize/(1024*1024)), http.StatusRequestEntityTooLarge)
+			return
+		}
 		writeError(w, "invalid body", http.StatusBadRequest)
 		return
 	}
@@ -272,6 +290,14 @@ func writeImage(w http.ResponseWriter, img []byte, mimeType string) {
 	w.Header().Set("Content-Type", mimeType)
 	w.WriteHeader(http.StatusOK)
 	w.Write(img)
+}
+
+func limitBodySize(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Limitar el tamaño del body usando MaxBytesReader
+		r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
+		next(w, r)
+	}
 }
 
 func writeError(w http.ResponseWriter, message string, statusCode int) {
