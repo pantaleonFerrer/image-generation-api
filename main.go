@@ -145,7 +145,8 @@ func handleResize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := base64.StdEncoding.DecodeString(req.ImageBase64); err != nil {
+	imgData, err := base64.StdEncoding.DecodeString(req.ImageBase64)
+	if err != nil {
 		writeError(w, "invalid base64", http.StatusBadRequest)
 		return
 	}
@@ -153,7 +154,7 @@ func handleResize(w http.ResponseWriter, r *http.Request) {
 	prompt := fmt.Sprintf("Resize this image by x%d preserving details.", req.Scale)
 
 	ctx := r.Context()
-	imgBytes, mimeType, err := generateSingleImage(ctx, prompt)
+	imgBytes, mimeType, err := generateImageFromImage(ctx, imgData, "image/png", prompt)
 	if err != nil {
 		log.Printf("Error resizing image: %v", err)
 		writeError(w, fmt.Sprintf("resize error: %v", err), http.StatusInternalServerError)
@@ -183,7 +184,8 @@ func handleSketchToImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := base64.StdEncoding.DecodeString(req.ImageBase64); err != nil {
+	imgData, err := base64.StdEncoding.DecodeString(req.ImageBase64)
+	if err != nil {
 		writeError(w, "invalid base64", http.StatusBadRequest)
 		return
 	}
@@ -191,7 +193,7 @@ func handleSketchToImage(w http.ResponseWriter, r *http.Request) {
 	prompt := fmt.Sprintf("Interpret this sketch as '%s'.", req.Description)
 
 	ctx := r.Context()
-	imgBytes, mimeType, err := generateSingleImage(ctx, prompt)
+	imgBytes, mimeType, err := generateImageFromImage(ctx, imgData, "image/png", prompt)
 	if err != nil {
 		log.Printf("Error converting sketch to image: %v", err)
 		writeError(w, fmt.Sprintf("sketch error: %v", err), http.StatusInternalServerError)
@@ -221,7 +223,8 @@ func handleMagicEraser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := base64.StdEncoding.DecodeString(req.ImageBase64); err != nil {
+	imgData, err := base64.StdEncoding.DecodeString(req.ImageBase64)
+	if err != nil {
 		writeError(w, "invalid base64", http.StatusBadRequest)
 		return
 	}
@@ -229,7 +232,7 @@ func handleMagicEraser(w http.ResponseWriter, r *http.Request) {
 	prompt := "Remove the pink masked area and reconstruct the background."
 
 	ctx := r.Context()
-	imgBytes, mimeType, err := generateSingleImage(ctx, prompt)
+	imgBytes, mimeType, err := generateImageFromImage(ctx, imgData, "image/png", prompt)
 	if err != nil {
 		log.Printf("Error with magic eraser: %v", err)
 		writeError(w, fmt.Sprintf("eraser error: %v", err), http.StatusInternalServerError)
@@ -270,6 +273,58 @@ func generateSingleImage(ctx context.Context, prompt string) ([]byte, string, er
 
 		parts := result.Candidates[0].Content.Parts
 		for _, part := range parts {
+			if part.InlineData != nil {
+				mimeType := part.InlineData.MIMEType
+				if mimeType == "" {
+					mimeType = "image/png"
+				}
+				return part.InlineData.Data, mimeType, nil
+			}
+		}
+	}
+
+	return nil, "", fmt.Errorf("no image returned")
+}
+
+func generateImageFromImage(ctx context.Context, imageData []byte, imageMimeType string, prompt string) ([]byte, string, error) {
+	parts := []*genai.Part{
+		{
+			InlineData: &genai.Blob{
+				MIMEType: imageMimeType,
+				Data:     imageData,
+			},
+		},
+		genai.NewPartFromText(prompt),
+	}
+
+	contents := []*genai.Content{
+		{
+			Role:  "user",
+			Parts: parts,
+		},
+	}
+
+	config := &genai.GenerateContentConfig{
+		ResponseModalities: []string{
+			"IMAGE",
+			"TEXT",
+		},
+		ImageConfig: &genai.ImageConfig{
+			ImageSize: "1K",
+		},
+	}
+
+	for result, err := range aiClient.Models.GenerateContentStream(ctx, modelName, contents, config) {
+		if err != nil {
+			return nil, "", err
+		}
+
+		if len(result.Candidates) == 0 || result.Candidates[0].Content == nil || len(result.Candidates[0].Content.Parts) == 0 {
+			continue
+		}
+
+		resultParts := result.Candidates[0].Content.Parts
+		for _, part := range resultParts {
 			if part.InlineData != nil {
 				mimeType := part.InlineData.MIMEType
 				if mimeType == "" {
