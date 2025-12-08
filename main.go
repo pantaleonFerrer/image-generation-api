@@ -157,7 +157,7 @@ func handleSketchToImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prompt := fmt.Sprintf("Sketch to Image: interpret this sketch as '%s'.", req.Description)
+	prompt := fmt.Sprintf("Interpret this sketch as '%s'.", req.Description)
 
 	ctx := r.Context()
 	imgBytes, mimeType, err := generateSingleImage(ctx, prompt)
@@ -191,7 +191,7 @@ func handleMagicEraser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prompt := "Magic eraser: remove the pink masked area and reconstruct background."
+	prompt := "Remove the pink masked area and reconstruct the background."
 
 	ctx := r.Context()
 	imgBytes, mimeType, err := generateSingleImage(ctx, prompt)
