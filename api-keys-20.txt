@@ -1,0 +1,36 @@
+=== 20 API Keys Generadas ===
+
+Cada key tiene un límite de 20 llamadas.
+Usa la key en el header: X-API-Key
+
+---
+
+1. _tXRfCWS9oqlVD0KAFwDFqmtGXXfnyDLBvT9lrJrYG4=
+2. da7toRYi3mTySm41_uI7fSfXYQyPYM0LaM2QeZZJwC4=
+3. LLwsytEhMjlENeHOImclJKNITIwltnpvmUGmpj0CKAk=
+4. GFyDrEdj93OfY4zRgH2EgfjF2DDxah0EvCGMQzMwRYo=
+5. rvXmSafGL8O3AZ4WyKRpH9DDAE3RSlvYkolbp3l6wIY=
+6. _3xaWni-CrcDYAYlQLUAV7rBSsLxBmEPtJINht3TzhY=
+7. SEF3p9iIxVIg6fk5NfQZALVqzWF4JtcHo1Jpyy_l930=
+8. VATZ2RdvBjBJziv5uoG_gh0tIItqoQ-m-hhd15kLk4s=
+9. w9Q5yUDUE-T68460RePj5mBx5ihdJILQix0492ukK3Y=
+10. EUTm91f-ZbK5lMHskdIa90-Qx-49fLD_xnFQ78UF_k8=
+11. tul6X1w_0u7j9aIp5OJEsSmWYyZyQLr1cJuqf3EbTpc=
+12. zJBpJLnYAWnu-yVtKzloghiCQ35g4-QiJvitNPZTEi0=
+13. cC9pZriPPsbIkXDNKsxX7GrqyR3K9QKWez3WXd4i-kc=
+14. 4Fd4XbbkD0tOXBwOgquuAqFNO4gsh5zEVNLUqNfhRqU=
+15. cN66RsKuY8PBjGtjA6m8L3bq6VcVzB06HFbdk1s3eAc=
+16. Wxpm0AGA8SdftHaVYAuE2mRzUbBOcNNCN1f9t8SHB0U=
+17. 36_QcIvLLRfhn0uMyLHLNxte0DPmF9NPATLaN9HKui0=
+18. aInTFdcP56HFmvVZ-N25F0x4LUjtpuy_hO75j9zFB_I=
+19. rDhRjXe6upfnzApOpNUTM12ENUGJZc3ZL0UZ_EltYk8=
+20. NjlvH-RRp3i6fIkCLN8VHLJ7IWOH3fIu3RTIn-8Plio=
+
+---
+
+Ejemplo de uso:
+curl -X POST http://localhost:8080/text-to-image \
+  -H "X-API-Key: TU_KEY_AQUI" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Un gato"}'
+

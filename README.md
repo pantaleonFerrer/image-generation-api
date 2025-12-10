@@ -50,9 +50,68 @@ docker-compose up --build
 
 La API estará disponible en `http://localhost:8080`
 
+## 🔐 Autenticación
+
+Todos los endpoints requieren una API Key válida. Se generan automáticamente **18 API Keys** al iniciar la aplicación, cada una con un límite de **20 llamadas**.
+
+### Cómo usar la API Key
+
+Puedes enviar la API Key de dos formas:
+
+1. **Header HTTP** (recomendado):
+   ```bash
+   X-API-Key: tu_api_key_aqui
+   ```
+
+2. **Query parameter**:
+   ```
+   ?api_key=tu_api_key_aqui
+   ```
+
+### Obtener las API Keys
+
+Las API Keys se generan automáticamente al iniciar la aplicación y se guardan en el archivo `api-keys.txt` en la raíz del proyecto.
+
+También puedes consultar el estado de todas las keys mediante el endpoint:
+```bash
+GET /api-keys
+```
+
+Este endpoint devuelve todas las keys con su estado (usadas/limite restante).
+
+### Límites
+
+- Cada API Key tiene un límite de **20 llamadas**
+- Una vez alcanzado el límite, recibirás un error `429 Too Many Requests`
+- Las keys se reinician al reiniciar la aplicación
+
 ## 📚 Documentación de Endpoints
 
-Todos los endpoints aceptan peticiones `POST` y devuelven imágenes en formato PNG.
+Todos los endpoints aceptan peticiones `POST` y devuelven imágenes en formato PNG. **Todos requieren autenticación mediante API Key.**
+
+### 0. Listar API Keys
+
+Obtiene el estado de todas las API keys disponibles.
+
+**Endpoint:** `GET /api-keys`
+
+**Respuesta:**
+```json
+{
+  "keys": [
+    {
+      "key": "api_key_1",
+      "used": 5,
+      "limit": 20,
+      "remaining": 15
+    },
+    ...
+  ],
+  "total": 18
+}
+```
+
+---
 
 ### 1. Generar Imagen desde Texto
 
@@ -78,10 +137,15 @@ Genera una imagen a partir de una descripción en texto.
 **Ejemplo con cURL:**
 ```bash
 curl -X POST http://localhost:8080/text-to-image \
+  -H "X-API-Key: tu_api_key_aqui" \
   -H "Content-Type: application/json" \
   -d '{"prompt": "Un paisaje montañoso al atardecer"}' \
   --output imagen.png
 ```
+
+**Respuestas de error:**
+- **401 Unauthorized**: Si falta la API key o es inválida
+- **429 Too Many Requests**: Si se ha excedido el límite de llamadas de la API key
 
 ---
 
@@ -117,6 +181,7 @@ Amplía una imagen manteniendo los detalles. Solo soporta escalado x2 o x4.
 IMAGE_BASE64=$(base64 -i imagen_original.jpg)
 
 curl -X POST http://localhost:8080/resize \
+  -H "X-API-Key: tu_api_key_aqui" \
   -H "Content-Type: application/json" \
   -d "{\"image_base64\": \"$IMAGE_BASE64\", \"scale\": 2}" \
   --output imagen_redimensionada.png
@@ -155,6 +220,7 @@ Transforma un boceto o dibujo en una imagen realista basada en una descripción.
 SKETCH_BASE64=$(base64 -i boceto.jpg)
 
 curl -X POST http://localhost:8080/sketch-to-image \
+  -H "X-API-Key: tu_api_key_aqui" \
   -H "Content-Type: application/json" \
   -d "{\"image_base64\": \"$SKETCH_BASE64\", \"description\": \"Un coche deportivo rojo\"}" \
   --output imagen_final.png
@@ -193,6 +259,7 @@ Elimina áreas enmascaradas en color rosa de una imagen y reconstruye el fondo d
 IMAGE_BASE64=$(base64 -i imagen_con_mascara.jpg)
 
 curl -X POST http://localhost:8080/magic-eraser \
+  -H "X-API-Key: tu_api_key_aqui" \
   -H "Content-Type: application/json" \
   -d "{\"image_base64\": \"$IMAGE_BASE64\"}" \
   --output imagen_limpia.png

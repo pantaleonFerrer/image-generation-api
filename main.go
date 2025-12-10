@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"sync"
 
 	"github.com/joho/godotenv"
 	"google.golang.org/genai"
@@ -17,7 +19,16 @@ var (
 	aiClient    *genai.Client
 	modelName   = "gemini-3-pro-image-preview"
 	maxBodySize int64
+	apiKeys     = make(map[string]*apiKeyInfo)
+	keysMutex   sync.RWMutex
 )
+
+type apiKeyInfo struct {
+	Key   string
+	Used  int
+	Limit int
+	mutex sync.Mutex
+}
 
 type TextToImageRequest struct {
 	Prompt string `json:"prompt"`
@@ -64,12 +75,25 @@ func main() {
 		}
 	}
 
+	// Cargar las 20 API keys predefinidas
+	loadPredefinedAPIKeys()
+
+	log.Println("=== API Keys cargadas ===")
+	keysMutex.RLock()
+	for key := range apiKeys {
+		log.Printf("API Key: %s (Límite: %d llamadas)", key, apiKeys[key].Limit)
+	}
+	keysMutex.RUnlock()
+	log.Printf("Total de API Keys: %d", len(apiKeys))
+	log.Println("===========================")
+
 	// Crear mux con middleware
 	mux := http.NewServeMux()
-	mux.HandleFunc("/text-to-image", limitBodySize(handleTextToImage))
-	mux.HandleFunc("/resize", limitBodySize(handleResize))
-	mux.HandleFunc("/sketch-to-image", limitBodySize(handleSketchToImage))
-	mux.HandleFunc("/magic-eraser", limitBodySize(handleMagicEraser))
+	mux.HandleFunc("/text-to-image", limitBodySize(validateAPIKey(handleTextToImage)))
+	mux.HandleFunc("/resize", limitBodySize(validateAPIKey(handleResize)))
+	mux.HandleFunc("/sketch-to-image", limitBodySize(validateAPIKey(handleSketchToImage)))
+	mux.HandleFunc("/magic-eraser", limitBodySize(validateAPIKey(handleMagicEraser)))
+	mux.HandleFunc("/api-keys", handleListAPIKeys)
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -353,6 +377,150 @@ func limitBodySize(next http.HandlerFunc) http.HandlerFunc {
 		r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
 		next(w, r)
 	}
+}
+
+func loadPredefinedAPIKeys() {
+	// Las 20 API keys predefinidas
+	predefinedKeys := []string{
+		"_tXRfCWS9oqlVD0KAFwDFqmtGXXfnyDLBvT9lrJrYG4=",
+		"da7toRYi3mTySm41_uI7fSfXYQyPYM0LaM2QeZZJwC4=",
+		"LLwsytEhMjlENeHOImclJKNITIwltnpvmUGmpj0CKAk=",
+		"GFyDrEdj93OfY4zRgH2EgfjF2DDxah0EvCGMQzMwRYo=",
+		"rvXmSafGL8O3AZ4WyKRpH9DDAE3RSlvYkolbp3l6wIY=",
+		"_3xaWni-CrcDYAYlQLUAV7rBSsLxBmEPtJINht3TzhY=",
+		"SEF3p9iIxVIg6fk5NfQZALVqzWF4JtcHo1Jpyy_l930=",
+		"VATZ2RdvBjBJziv5uoG_gh0tIItqoQ-m-hhd15kLk4s=",
+		"w9Q5yUDUE-T68460RePj5mBx5ihdJILQix0492ukK3Y=",
+		"EUTm91f-ZbK5lMHskdIa90-Qx-49fLD_xnFQ78UF_k8=",
+		"tul6X1w_0u7j9aIp5OJEsSmWYyZyQLr1cJuqf3EbTpc=",
+		"zJBpJLnYAWnu-yVtKzloghiCQ35g4-QiJvitNPZTEi0=",
+		"cC9pZriPPsbIkXDNKsxX7GrqyR3K9QKWez3WXd4i-kc=",
+		"4Fd4XbbkD0tOXBwOgquuAqFNO4gsh5zEVNLUqNfhRqU=",
+		"cN66RsKuY8PBjGtjA6m8L3bq6VcVzB06HFbdk1s3eAc=",
+		"Wxpm0AGA8SdftHaVYAuE2mRzUbBOcNNCN1f9t8SHB0U=",
+		"36_QcIvLLRfhn0uMyLHLNxte0DPmF9NPATLaN9HKui0=",
+		"aInTFdcP56HFmvVZ-N25F0x4LUjtpuy_hO75j9zFB_I=",
+		"rDhRjXe6upfnzApOpNUTM12ENUGJZc3ZL0UZ_EltYk8=",
+		"NjlvH-RRp3i6fIkCLN8VHLJ7IWOH3fIu3RTIn-8Plio=",
+	}
+
+	keysMutex.Lock()
+	for _, key := range predefinedKeys {
+		apiKeys[key] = &apiKeyInfo{
+			Key:   key,
+			Used:  0,
+			Limit: 20,
+		}
+	}
+	keysMutex.Unlock()
+}
+
+func generateAPIKeys(count int, limitPerKey int) {
+	for i := 0; i < count; i++ {
+		key := generateRandomKey()
+		keysMutex.Lock()
+		apiKeys[key] = &apiKeyInfo{
+			Key:   key,
+			Used:  0,
+			Limit: limitPerKey,
+		}
+		keysMutex.Unlock()
+	}
+}
+
+func saveAPIKeysToFile() {
+	file, err := os.Create("api-keys.txt")
+	if err != nil {
+		log.Printf("Error creating api-keys.txt: %v", err)
+		return
+	}
+	defer file.Close()
+
+	keysMutex.RLock()
+	defer keysMutex.RUnlock()
+
+	file.WriteString("=== API Keys Generadas ===\n\n")
+	file.WriteString("Cada key tiene un límite de 20 llamadas.\n")
+	file.WriteString("Usa la key en el header X-API-Key o como query parameter api_key\n\n")
+
+	for key, info := range apiKeys {
+		file.WriteString(fmt.Sprintf("Key: %s\n", key))
+		file.WriteString(fmt.Sprintf("Límite: %d llamadas\n", info.Limit))
+		file.WriteString("---\n")
+	}
+
+	file.WriteString("\nEjemplo de uso:\n")
+	file.WriteString("curl -X POST http://localhost:8080/text-to-image \\\n")
+	file.WriteString("  -H \"X-API-Key: TU_API_KEY_AQUI\" \\\n")
+	file.WriteString("  -H \"Content-Type: application/json\" \\\n")
+	file.WriteString("  -d '{\"prompt\": \"Un gato\"}'\n")
+}
+
+func generateRandomKey() string {
+	bytes := make([]byte, 32)
+	rand.Read(bytes)
+	return base64.URLEncoding.EncodeToString(bytes)
+}
+
+func validateAPIKey(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		apiKey := r.Header.Get("X-API-Key")
+		if apiKey == "" {
+			apiKey = r.URL.Query().Get("api_key")
+		}
+
+		if apiKey == "" {
+			writeError(w, "API key is required. Provide it in X-API-Key header or api_key query parameter", http.StatusUnauthorized)
+			return
+		}
+
+		keysMutex.RLock()
+		keyInfo, exists := apiKeys[apiKey]
+		keysMutex.RUnlock()
+
+		if !exists {
+			writeError(w, "Invalid API key", http.StatusUnauthorized)
+			return
+		}
+
+		keyInfo.mutex.Lock()
+		if keyInfo.Used >= keyInfo.Limit {
+			keyInfo.mutex.Unlock()
+			writeError(w, fmt.Sprintf("API key limit exceeded. Used: %d/%d", keyInfo.Used, keyInfo.Limit), http.StatusTooManyRequests)
+			return
+		}
+		keyInfo.Used++
+		keyInfo.mutex.Unlock()
+
+		next(w, r)
+	}
+}
+
+func handleListAPIKeys(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, "GET only", http.StatusMethodNotAllowed)
+		return
+	}
+
+	keysMutex.RLock()
+	keysList := make([]map[string]interface{}, 0, len(apiKeys))
+	for key, info := range apiKeys {
+		info.mutex.Lock()
+		keysList = append(keysList, map[string]interface{}{
+			"key":       key,
+			"used":      info.Used,
+			"limit":     info.Limit,
+			"remaining": info.Limit - info.Used,
+		})
+		info.mutex.Unlock()
+	}
+	keysMutex.RUnlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"keys":  keysList,
+		"total": len(keysList),
+	})
 }
 
 func writeError(w http.ResponseWriter, message string, statusCode int) {
