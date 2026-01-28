@@ -1,5 +1,9 @@
 # API de Generación de Imágenes
 
+
+
+
+:
 API REST desarrollada en Go que utiliza Google GenAI (Imagen 4.0) para generar y manipular imágenes mediante inteligencia artificial.
 
 ## 🚀 Características
