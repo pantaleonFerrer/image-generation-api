@@ -380,28 +380,8 @@ func limitBodySize(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func loadPredefinedAPIKeys() {
-	// Las 20 API keys predefinidas
 	predefinedKeys := []string{
 		"_tXRfCWS9oqlVD0KAFwDFqmtGXXfnyDLBvT9lrJrYG4=",
-		"da7toRYi3mTySm41_uI7fSfXYQyPYM0LaM2QeZZJwC4=",
-		"LLwsytEhMjlENeHOImclJKNITIwltnpvmUGmpj0CKAk=",
-		"GFyDrEdj93OfY4zRgH2EgfjF2DDxah0EvCGMQzMwRYo=",
-		"rvXmSafGL8O3AZ4WyKRpH9DDAE3RSlvYkolbp3l6wIY=",
-		"_3xaWni-CrcDYAYlQLUAV7rBSsLxBmEPtJINht3TzhY=",
-		"SEF3p9iIxVIg6fk5NfQZALVqzWF4JtcHo1Jpyy_l930=",
-		"VATZ2RdvBjBJziv5uoG_gh0tIItqoQ-m-hhd15kLk4s=",
-		"w9Q5yUDUE-T68460RePj5mBx5ihdJILQix0492ukK3Y=",
-		"EUTm91f-ZbK5lMHskdIa90-Qx-49fLD_xnFQ78UF_k8=",
-		"tul6X1w_0u7j9aIp5OJEsSmWYyZyQLr1cJuqf3EbTpc=",
-		"zJBpJLnYAWnu-yVtKzloghiCQ35g4-QiJvitNPZTEi0=",
-		"cC9pZriPPsbIkXDNKsxX7GrqyR3K9QKWez3WXd4i-kc=",
-		"4Fd4XbbkD0tOXBwOgquuAqFNO4gsh5zEVNLUqNfhRqU=",
-		"cN66RsKuY8PBjGtjA6m8L3bq6VcVzB06HFbdk1s3eAc=",
-		"Wxpm0AGA8SdftHaVYAuE2mRzUbBOcNNCN1f9t8SHB0U=",
-		"36_QcIvLLRfhn0uMyLHLNxte0DPmF9NPATLaN9HKui0=",
-		"aInTFdcP56HFmvVZ-N25F0x4LUjtpuy_hO75j9zFB_I=",
-		"rDhRjXe6upfnzApOpNUTM12ENUGJZc3ZL0UZ_EltYk8=",
-		"NjlvH-RRp3i6fIkCLN8VHLJ7IWOH3fIu3RTIn-8Plio=",
 	}
 
 	keysMutex.Lock()
@@ -409,7 +389,7 @@ func loadPredefinedAPIKeys() {
 		apiKeys[key] = &apiKeyInfo{
 			Key:   key,
 			Used:  0,
-			Limit: 20,
+			Limit: 150,
 		}
 	}
 	keysMutex.Unlock()
